@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
+const sensorRoutes = require("./routes/sensor.routes");
 
 const app = express();
 
@@ -14,6 +15,8 @@ app.get("/", (req, res) => {
         message: "Smart Air Purifier API is running"
     });
 });
+
+app.use("/api", sensorRoutes);
 
 const PORT = process.env.PORT || 8000;
 
