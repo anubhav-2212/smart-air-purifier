@@ -1,17 +1,10 @@
-const mongoose = require("mongoose");
+
+import mongoose from "mongoose";
 
 const sensorReadingSchema = new mongoose.Schema(
     {
-        nodeId: {
+        deviceId: {
             type: String,
-            required: true
-        },
-        pm25: {
-            type: Number,
-            required: true
-        },
-        pm10: {
-            type: Number,
             required: true
         },
         temperature: {
@@ -22,18 +15,32 @@ const sensorReadingSchema = new mongoose.Schema(
             type: Number,
             required: true
         },
-        battery: {
+        mq135Raw: {
             type: Number,
             required: true
         },
-        fanSpeed: {
+        mq135Voltage: {
             type: Number,
-            default: 0
-        }
+            required: true
+        },
+        dustRaw: {
+            type: Number,
+            required: true
+        },
+        dustVoltage: {
+            type: Number,
+            required: true
+        },
+        dustDensity: {
+            type: Number,
+            required: true
+        },
+       
     },
     {
         timestamps: true
     }
 );
+const SensorReading = mongoose.model("SensorReading", sensorReadingSchema);
 
-module.exports = mongoose.model("SensorReading", sensorReadingSchema);
+export default SensorReading;

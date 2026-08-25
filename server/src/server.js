@@ -1,14 +1,18 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
 
-const connectDB = require("./config/db");
-const sensorRoutes = require("./routes/sensor.routes");
+import express from "express";
+import cors from "cors";
+import "dotenv/config"
+import {connectDB} from "./config/db.js";
+import sensorRoutes from "./routes/sensor.routes.js";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    origin:"*",
+    
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
     res.json({
@@ -18,14 +22,14 @@ app.get("/", (req, res) => {
 
 app.use("/api", sensorRoutes);
 
-const PORT = process.env.PORT || 8000;
+const PORT =  process.env.PORT || 1000;
 
 const startServer = async () => {
     await connectDB();
 
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+   app.listen(9000, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 };
 
 startServer();
