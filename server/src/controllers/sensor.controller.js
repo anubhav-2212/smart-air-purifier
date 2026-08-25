@@ -50,6 +50,18 @@ export const receiveSensorData = async (req, res) => {
       dustVoltage,
       dustDensity,
     });
+    const io = req.app.get("io");
+
+io.emit("telemetry", {
+  deviceId,
+  temperature,
+  humidity,
+  mq135Raw,
+  mq135Voltage,
+  dustRaw,
+  dustVoltage,
+  dustDensity,
+});
 
     return res.status(201).json({
       success: true,

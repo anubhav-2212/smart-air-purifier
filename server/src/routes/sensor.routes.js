@@ -1,8 +1,8 @@
 import express from "express";
 import { receiveSensorData } from "../controllers/sensor.controller.js";
 
-const router = express.Router();
+const sensorRoute  = express.Router();
 
-router.post("/telemetry", receiveSensorData);
+sensorRoute.post("/telemetry", receiveSensorData);
 
-export default router;
+export default sensorRoute;
