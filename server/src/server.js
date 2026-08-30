@@ -3,6 +3,9 @@ import http from "http";
 import { Server } from "socket.io";
 import sensorRoutes from "./routes/sensor.routes.js";
 import { connectDB } from "./config/db.js";
+import dotenv from "dotenv";
+dotenv.config();
+import historyRoutes from "./routes/history.routes.js";
 
 const app = express();
 
@@ -22,6 +25,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 8000;
 
 app.use("/api", sensorRoutes);
+app.use("/api", historyRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello from the server!");
