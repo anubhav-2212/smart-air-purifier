@@ -10,14 +10,17 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"],
   },
 });
+
 app.set("io", io);
 
 app.use(express.json());
-const PORT=process.env.PORT || 8000
-// Your existing routes
+
+const PORT = process.env.PORT || 8000;
+
 app.use("/api", sensorRoutes);
 
 app.get("/", (req, res) => {
@@ -25,12 +28,31 @@ app.get("/", (req, res) => {
 });
 
 connectDB();
-// Socket connection
+
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
+  });
+});
+app.get("/test-telemetry", (req, res) => {
+  const io = req.app.get("io");
+
+  io.emit("telemetry", {
+    deviceId: "esp32-air-001",
+    temperature: 26.6,
+    humidity: 74.5,
+    mq135Raw: 499,
+    mq135Voltage: 0.402,
+    dustRaw: 0,
+    dustVoltage: 0,
+    dustDensity: 0,
+  });
+
+  res.json({
+    success: true,
+    message: "Test telemetry emitted",
   });
 });
 
