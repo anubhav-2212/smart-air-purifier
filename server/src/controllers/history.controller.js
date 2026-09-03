@@ -2,20 +2,43 @@ import SensorReading from "../models/SensorReading.model.js";
 
 export const getHistory = async (req, res) => {
   try {
-    const { deviceId } = req.query;
+    const {
+      deviceId = "esp32-air-001",
+      range = "7d",
+    } = req.query;
 
-    const filter = deviceId ? { deviceId } : {};
+    const ranges = {
+      "1h": 60 * 60 * 1000,
+      "6h": 6 * 60 * 60 * 1000,
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
+    };
+
+    const duration = ranges[range];
+
+    if (!duration) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid range",
+      });
+    }
 
     const readings = await SensorReading
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .limit(100)
+      .find({
+        deviceId,
+        createdAt: {
+          $gte: new Date(Date.now() - duration),
+        },
+      })
+      .sort({ createdAt: 1 })
       .lean();
 
     return res.status(200).json({
       success: true,
       count: readings.length,
-      data: readings.reverse(),
+      range,
+      deviceId,
+      data: readings,
     });
 
   } catch (error) {
