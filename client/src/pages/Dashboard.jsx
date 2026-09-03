@@ -211,7 +211,10 @@ export default function Dashboard() {
 
         const formattedData = result.data.map(
           (item) => ({
-            time: item.time,
+           time: new Date(item.createdAt).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+}),
 
             temperature: Number(
               item.temperature ?? 0
@@ -241,7 +244,7 @@ export default function Dashboard() {
     };
 
     fetchHistoricalData();
-  }, []);
+  }, [range]);
 
   /*
    * ------------------------------------------------
@@ -267,6 +270,12 @@ export default function Dashboard() {
       )
     : null;
 
+  const latestHistorical =
+  historicalData.length > 0
+    ? historicalData[historicalData.length - 1]
+    : null;
+
+const currentData = telemetry || latestHistorical;
   /*
    * ------------------------------------------------
    * UI
@@ -324,7 +333,7 @@ export default function Dashboard() {
         </header>
 
         {/* WAITING FOR DATA */}
-        {!telemetry ? (
+        {!currentData ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <Activity
               className="mx-auto text-slate-400"
@@ -385,7 +394,7 @@ export default function Dashboard() {
                 <SensorCard
                   icon={<Thermometer size={20} />}
                   label="Temperature"
-                  value={telemetry.temperature}
+                  value={currentData.temperature}
                   unit="°C"
                   description="Current temperature"
                 />
@@ -393,7 +402,7 @@ export default function Dashboard() {
                 <SensorCard
                   icon={<Droplets size={20} />}
                   label="Humidity"
-                  value={telemetry.humidity}
+                  value={currentData.humidity}
                   unit="%"
                   description="Relative humidity"
                 />
@@ -401,14 +410,14 @@ export default function Dashboard() {
                 <SensorCard
                   icon={<Activity size={20} />}
                   label="MQ-135 Gas"
-                  value={telemetry.mq135Raw}
-                  description={`${telemetry.mq135Voltage} V sensor output`}
+                  value={currentData.mq135Raw}
+                  description={`${currentData.mq135Voltage} V sensor output`}
                 />
 
                 <SensorCard
                   icon={<Wind size={20} />}
                   label="Dust Density"
-                  value={telemetry.dustDensity}
+                  value={currentData.dustDensity}
                   unit="mg/m³"
                   description="GP2Y10 reading"
                 />
