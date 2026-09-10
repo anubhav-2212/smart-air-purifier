@@ -78,3 +78,45 @@ io.emit("telemetry", {
     });
   }
 };
+export const setFanSpeed = async (req, res) => {
+  try {
+    const { deviceId, speed } = req.body;
+
+    if (!deviceId || speed === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "deviceId and speed are required",
+      });
+    }
+
+    if (speed < 0 || speed > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Fan speed must be between 0 and 100",
+      });
+    }
+
+    const io = req.app.get("io");
+
+    io.emit("fanCommand", {
+      deviceId,
+      speed,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Fan speed command sent",
+      data: {
+        deviceId,
+        speed,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to set fan speed:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to set fan speed",
+    });
+  }
+};

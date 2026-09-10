@@ -195,6 +195,7 @@ export default function Dashboard() {
         }
 
         const result = await response.json();
+        setLiveData([]);
 
         console.log(
           "HISTORICAL DATA:",
@@ -263,12 +264,7 @@ export default function Dashboard() {
    * ------------------------------------------------
    */
 
-  const airQuality = telemetry
-    ? getAirQuality(
-        telemetry.dustDensity,
-        telemetry.mq135Raw
-      )
-    : null;
+
 
   const latestHistorical =
   historicalData.length > 0
@@ -276,6 +272,12 @@ export default function Dashboard() {
     : null;
 
 const currentData = telemetry || latestHistorical;
+  const airQuality = currentData
+    ? getAirQuality(
+        currentData.dustDensity,
+        currentData.mq135Raw
+      )
+    : null;
   /*
    * ------------------------------------------------
    * UI
