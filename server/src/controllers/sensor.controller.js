@@ -1,5 +1,5 @@
 import SensorReading from "../models/SensorReading.model.js";
-
+const fanCommands = new Map();
 export const receiveSensorData = async (req, res) => {
   try {
     const {
@@ -96,27 +96,48 @@ export const setFanSpeed = async (req, res) => {
       });
     }
 
-    const io = req.app.get("io");
-
-    io.emit("fanCommand", {
-      deviceId,
-      speed,
-    });
+    // Store latest fan command
+    fanCommands.set(deviceId, speed);
 
     return res.status(200).json({
       success: true,
-      message: "Fan speed command sent",
+      message: "Fan speed command stored",
       data: {
         deviceId,
         speed,
       },
     });
+
   } catch (error) {
     console.error("Failed to set fan speed:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to set fan speed",
+    });
+  }
+};
+
+export const getFanSpeed = async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+
+    const speed = fanCommands.get(deviceId) ?? 0;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        deviceId,
+        speed,
+      },
+    });
+
+  } catch (error) {
+    console.error("Failed to get fan speed:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get fan speed",
     });
   }
 };

@@ -62,11 +62,20 @@ connectDB();
  * SOCKET CONNECTION
  */
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  console.log("✅ Socket.IO client connected:", socket.id);
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket.IO client disconnected:", socket.id, reason);
   });
+
+  socket.on("connect_error", (error) => {
+    console.log("❌ Connect error:", error.message);
+  });
+});
+io.engine.on("connection_error", (err) => {
+  console.log("❌ Engine.IO connection error");
+  console.log("Code:", err.code);
+  console.log("Message:", err.message);
 });
 
 /*
