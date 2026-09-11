@@ -12,6 +12,9 @@ import {
 import socket from "../services/socket";
 import SensorChart from "../components/SensorChart";
 
+const DEVICE_ID = "esp32-air-001";
+const API_BASE = "http://localhost:9000";
+
 function SensorCard({ icon, label, value, unit, description }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -33,9 +36,7 @@ function SensorCard({ icon, label, value, unit, description }) {
             )}
           </div>
 
-          <p className="mt-1 text-sm text-slate-500">
-            {description}
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
 
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
@@ -57,17 +58,14 @@ function getAirQuality(dustDensity, mq135Raw) {
     100
   );
 
-  const score = Math.round(
-    Math.max(dustScore, gasScore)
-  );
+  const score = Math.round(Math.max(dustScore, gasScore));
 
   if (score <= 25) {
     return {
       score,
       label: "Good",
       description: "Air quality looks good",
-      className:
-        "bg-emerald-50 text-emerald-700 border-emerald-200",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     };
   }
 
@@ -76,8 +74,7 @@ function getAirQuality(dustDensity, mq135Raw) {
       score,
       label: "Moderate",
       description: "Air quality is acceptable",
-      className:
-        "bg-amber-50 text-amber-700 border-amber-200",
+      className: "bg-amber-50 text-amber-700 border-amber-200",
     };
   }
 
@@ -86,8 +83,7 @@ function getAirQuality(dustDensity, mq135Raw) {
       score,
       label: "Poor",
       description: "Consider increasing purification",
-      className:
-        "bg-orange-50 text-orange-700 border-orange-200",
+      className: "bg-orange-50 text-orange-700 border-orange-200",
     };
   }
 
@@ -95,8 +91,7 @@ function getAirQuality(dustDensity, mq135Raw) {
     score,
     label: "Very Poor",
     description: "High pollution detected",
-    className:
-      "bg-rose-50 text-rose-700 border-rose-200",
+    className: "bg-rose-50 text-rose-700 border-rose-200",
   };
 }
 
@@ -104,13 +99,15 @@ export default function Dashboard() {
   const [telemetry, setTelemetry] = useState(null);
   const [connected, setConnected] = useState(false);
 
-  // Historical data from API
   const [historicalData, setHistoricalData] = useState([]);
-
-  // Live data from Socket.IO
   const [liveData, setLiveData] = useState([]);
-
   const [range, setRange] = useState("7d");
+
+  // Fan control
+  const [fanMode, setFanMode] = useState("MANUAL");
+  const [fanSpeed, setFanSpeed] = useState(0);
+  const [fanStatus, setFanStatus] = useState("Ready");
+  const [fanLoading, setFanLoading] = useState(false);
 
   /*
    * ------------------------------------------------
@@ -132,34 +129,27 @@ export default function Dashboard() {
     const handleTelemetry = (data) => {
       console.log("LIVE TELEMETRY:", data);
 
-      // Update current sensor cards
       setTelemetry(data);
 
-      // Create graph point
       const point = {
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
         }),
-
         temperature: Number(data.temperature ?? 0),
         humidity: Number(data.humidity ?? 0),
         dustDensity: Number(data.dustDensity ?? 0),
         mq135Raw: Number(data.mq135Raw ?? 0),
       };
 
-      // Only update live data
-      setLiveData((previous) => {
-        return [...previous, point].slice(-30);
-      });
+      setLiveData((previous) => [...previous, point].slice(-30));
     };
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("telemetry", handleTelemetry);
 
-    // Socket may already be connected
     if (socket.connected) {
       setConnected(true);
     }
@@ -175,72 +165,43 @@ export default function Dashboard() {
    * ------------------------------------------------
    * HISTORICAL DATA
    * ------------------------------------------------
-   *
-   * TEMPORARY TEST ROUTE
-   *
-   * Later replace this with /api/history.
    */
 
   useEffect(() => {
     const fetchHistoricalData = async () => {
       try {
         const response = await fetch(
-          `http://localhost:9000/api/history?deviceId=esp32-air-001&range=${range}`
+          `${API_BASE}/api/history?deviceId=${DEVICE_ID}&range=${range}`
         );
 
         if (!response.ok) {
-          throw new Error(
-            `HTTP error: ${response.status}`
-          );
+          throw new Error(`HTTP error: ${response.status}`);
         }
 
         const result = await response.json();
-        setLiveData([]);
-
-        console.log(
-          "HISTORICAL DATA:",
-          result
-        );
 
         if (!result.success) {
-          console.error(
-            "Historical data request failed:",
-            result
-          );
+          console.error("Historical data request failed:", result);
           return;
         }
 
-        const formattedData = result.data.map(
-          (item) => ({
-           time: new Date(item.createdAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-}),
-
-            temperature: Number(
-              item.temperature ?? 0
-            ),
-
-            humidity: Number(
-              item.humidity ?? 0
-            ),
-
-            dustDensity: Number(
-              item.dustDensity ?? 0
-            ),
-
-            mq135Raw: Number(
-              item.mq135Raw ?? 0
-            ),
-          })
-        );
+        const formattedData = result.data.map((item) => ({
+          time: new Date(item.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          temperature: Number(item.temperature ?? 0),
+          humidity: Number(item.humidity ?? 0),
+          dustDensity: Number(item.dustDensity ?? 0),
+          mq135Raw: Number(item.mq135Raw ?? 0),
+        }));
 
         setHistoricalData(formattedData);
+        setLiveData([]);
+
+        console.log("HISTORICAL DATA:", result);
       } catch (error) {
-        console.error(
-          "Historical data error:",
-          error
-        );
+        console.error("Historical data error:", error);
       }
     };
 
@@ -249,14 +210,104 @@ export default function Dashboard() {
 
   /*
    * ------------------------------------------------
+   * FAN CONTROL
+   * ------------------------------------------------
+   */
+
+  const sendFanCommand = async (speed, source = "manual") => {
+    const safeSpeed = Math.max(0, Math.min(100, Number(speed)));
+
+    setFanLoading(true);
+    setFanStatus("Sending...");
+
+    try {
+      const response = await fetch(`${API_BASE}/api/fan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          deviceId: DEVICE_ID,
+          speed: safeSpeed,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to set fan speed");
+      }
+
+      setFanSpeed(safeSpeed);
+      setFanStatus(
+        source === "auto" ? `Auto: ${safeSpeed}%` : `Set to ${safeSpeed}%`
+      );
+
+      console.log("FAN COMMAND:", result);
+    } catch (error) {
+      console.error("Fan control error:", error);
+      setFanStatus("Command failed");
+    } finally {
+      setFanLoading(false);
+    }
+  };
+
+  const handleManualFanApply = () => {
+    sendFanCommand(fanSpeed, "manual");
+  };
+
+  /*
+   * Automatic fan logic:
+   * Good      -> 20%
+   * Moderate  -> 45%
+   * Poor      -> 70%
+   * Very Poor -> 100%
+   */
+
+  useEffect(() => {
+    if (fanMode !== "AUTO" || !telemetry) return;
+
+    const quality = getAirQuality(
+      telemetry.dustDensity,
+      telemetry.mq135Raw
+    );
+
+    let targetSpeed = 20;
+
+    if (quality.score > 75) {
+      targetSpeed = 100;
+    } else if (quality.score > 50) {
+      targetSpeed = 70;
+    } else if (quality.score > 25) {
+      targetSpeed = 45;
+    }
+
+    if (targetSpeed !== fanSpeed) {
+      sendFanCommand(targetSpeed, "auto");
+    }
+  }, [
+    fanMode,
+    telemetry?.dustDensity,
+    telemetry?.mq135Raw,
+  ]);
+
+  const handleModeChange = (mode) => {
+    setFanMode(mode);
+
+    if (mode === "AUTO") {
+      setFanStatus("Auto mode enabled");
+    } else {
+      setFanStatus("Manual mode enabled");
+    }
+  };
+
+  /*
+   * ------------------------------------------------
    * COMBINE HISTORICAL + LIVE DATA
    * ------------------------------------------------
    */
 
-  const graphData = [
-    ...historicalData,
-    ...liveData,
-  ].slice(-30);
+  const graphData = [...historicalData, ...liveData].slice(-30);
 
   /*
    * ------------------------------------------------
@@ -264,20 +315,17 @@ export default function Dashboard() {
    * ------------------------------------------------
    */
 
-
-
   const latestHistorical =
-  historicalData.length > 0
-    ? historicalData[historicalData.length - 1]
+    historicalData.length > 0
+      ? historicalData[historicalData.length - 1]
+      : null;
+
+  const currentData = telemetry || latestHistorical;
+
+  const airQuality = currentData
+    ? getAirQuality(currentData.dustDensity, currentData.mq135Raw)
     : null;
 
-const currentData = telemetry || latestHistorical;
-  const airQuality = currentData
-    ? getAirQuality(
-        currentData.dustDensity,
-        currentData.mq135Raw
-      )
-    : null;
   /*
    * ------------------------------------------------
    * UI
@@ -307,9 +355,7 @@ const currentData = telemetry || latestHistorical;
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div
               className={`h-2.5 w-2.5 rounded-full ${
-                connected
-                  ? "bg-emerald-500"
-                  : "bg-rose-500"
+                connected ? "bg-emerald-500" : "bg-rose-500"
               }`}
             />
 
@@ -326,9 +372,7 @@ const currentData = telemetry || latestHistorical;
             <Wifi
               size={18}
               className={
-                connected
-                  ? "text-emerald-600"
-                  : "text-rose-500"
+                connected ? "text-emerald-600" : "text-rose-500"
               }
             />
           </div>
@@ -396,7 +440,7 @@ const currentData = telemetry || latestHistorical;
                 <SensorCard
                   icon={<Thermometer size={20} />}
                   label="Temperature"
-                  value={currentData.temperature}
+                  value={Number(currentData.temperature ?? 0).toFixed(1)}
                   unit="°C"
                   description="Current temperature"
                 />
@@ -404,7 +448,7 @@ const currentData = telemetry || latestHistorical;
                 <SensorCard
                   icon={<Droplets size={20} />}
                   label="Humidity"
-                  value={currentData.humidity}
+                  value={Number(currentData.humidity ?? 0).toFixed(1)}
                   unit="%"
                   description="Relative humidity"
                 />
@@ -413,13 +457,13 @@ const currentData = telemetry || latestHistorical;
                   icon={<Activity size={20} />}
                   label="MQ-135 Gas"
                   value={currentData.mq135Raw}
-                  description={`${currentData.mq135Voltage} V sensor output`}
+                  description={`${currentData.mq135Voltage ?? 0} V sensor output`}
                 />
 
                 <SensorCard
                   icon={<Wind size={20} />}
                   label="Dust Density"
-                  value={currentData.dustDensity}
+                  value={Number(currentData.dustDensity ?? 0).toFixed(3)}
                   unit="mg/m³"
                   description="GP2Y10 reading"
                 />
@@ -452,9 +496,7 @@ const currentData = telemetry || latestHistorical;
                   ].map(([value, label]) => (
                     <button
                       key={value}
-                      onClick={() =>
-                        setRange(value)
-                      }
+                      onClick={() => setRange(value)}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         range === value
                           ? "bg-slate-950 text-white"
@@ -465,7 +507,6 @@ const currentData = telemetry || latestHistorical;
                     </button>
                   ))}
                 </div>
-
               </div>
 
               {/* CHARTS */}
@@ -499,7 +540,6 @@ const currentData = telemetry || latestHistorical;
                 />
 
               </div>
-
             </section>
 
             {/* FAN + FILTER */}
@@ -509,7 +549,6 @@ const currentData = telemetry || latestHistorical;
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
 
                 <div className="flex items-center gap-3">
-
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100">
                     <Fan size={20} />
                   </div>
@@ -523,62 +562,146 @@ const currentData = telemetry || latestHistorical;
                       Fan Control
                     </h2>
                   </div>
-
                 </div>
 
-                <div className="mt-6 flex items-center justify-between">
+                {/* MODE */}
+                <div className="mt-6">
+                  <p className="text-sm text-slate-500">Control mode</p>
 
-                  <span className="text-sm text-slate-500">
-                    Control mode
-                  </span>
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      onClick={() => handleModeChange("MANUAL")}
+                      className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                        fanMode === "MANUAL"
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-500 hover:bg-white hover:text-slate-950"
+                      }`}
+                    >
+                      Manual
+                    </button>
 
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                    AUTO
-                  </span>
-
+                    <button
+                      onClick={() => handleModeChange("AUTO")}
+                      className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                        fanMode === "AUTO"
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-500 hover:bg-white hover:text-slate-950"
+                      }`}
+                    >
+                      Auto
+                    </button>
+                  </div>
                 </div>
 
+                {/* SPEED */}
                 <div className="mt-6">
 
-                  <div className="flex justify-between text-sm">
-
-                    <span className="text-slate-500">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
                       Fan speed
                     </span>
 
-                    <span className="font-semibold text-slate-950">
-                      Coming soon
+                    <span className="text-2xl font-semibold text-slate-950">
+                      {fanSpeed}%
                     </span>
-
                   </div>
 
-                  <div className="mt-3 h-2 rounded-full bg-slate-100">
-                    <div className="h-2 w-0 rounded-full bg-slate-900" />
-                  </div>
-
-                </div>
-
-                <div className="mt-6 flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
-
-                  <Gauge
-                    size={20}
-                    className="text-slate-500"
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={fanSpeed}
+                    onChange={(event) =>
+                      setFanSpeed(Number(event.target.value))
+                    }
+                    disabled={fanMode === "AUTO"}
+                    className="mt-4 h-2 w-full cursor-pointer accent-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
                   />
 
-                  <div>
+                  <div className="mt-2 flex justify-between text-xs text-slate-400">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
 
-                    <p className="text-xs text-slate-400">
-                      Fan RPM
+                  <button
+                    onClick={handleManualFanApply}
+                    disabled={fanMode === "AUTO" || fanLoading}
+                    className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {fanLoading ? "Sending..." : "Apply Fan Speed"}
+                  </button>
+                </div>
+
+                {/* AUTO INFO */}
+                {fanMode === "AUTO" && (
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      Automatic control
                     </p>
 
-                    <p className="font-semibold text-slate-950">
-                      Not available
+                    <p className="mt-2 text-sm text-slate-600">
+                      Fan speed adjusts automatically from the estimated
+                      air-quality score.
                     </p>
 
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="font-semibold text-slate-700">Good</p>
+                        <p className="mt-1 text-slate-400">20%</p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="font-semibold text-slate-700">Moderate</p>
+                        <p className="mt-1 text-slate-400">45%</p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="font-semibold text-slate-700">Poor</p>
+                        <p className="mt-1 text-slate-400">70%</p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="font-semibold text-slate-700">Very Poor</p>
+                        <p className="mt-1 text-slate-400">100%</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* STATUS + RPM */}
+                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                  <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
+                    <Activity size={20} className="text-slate-500" />
+
+                    <div>
+                      <p className="text-xs text-slate-400">
+                        Command status
+                      </p>
+
+                      <p className="font-semibold text-slate-950">
+                        {fanStatus}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
+                    <Gauge size={20} className="text-slate-500" />
+
+                    <div>
+                      <p className="text-xs text-slate-400">
+                        Fan RPM
+                      </p>
+
+                      <p className="font-semibold text-slate-950">
+                        Not available
+                      </p>
+                    </div>
                   </div>
 
                 </div>
-
               </div>
 
               {/* FILTER */}
@@ -591,7 +714,6 @@ const currentData = telemetry || latestHistorical;
                   </div>
 
                   <div>
-
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                       Maintenance
                     </p>
@@ -599,7 +721,6 @@ const currentData = telemetry || latestHistorical;
                     <h2 className="text-lg font-semibold text-slate-950">
                       Filter Status
                     </h2>
-
                   </div>
 
                 </div>
@@ -611,14 +732,13 @@ const currentData = telemetry || latestHistorical;
                   </p>
 
                   <p className="mt-1 text-sm text-slate-400">
-                    Filter health estimation will be
-                    available after airflow data is added.
+                    Filter health estimation will be available after airflow
+                    data is added.
                   </p>
 
                 </div>
 
               </div>
-
             </section>
           </>
         )}
