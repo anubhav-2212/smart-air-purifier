@@ -1,4 +1,5 @@
 import SensorReading from "../models/SensorReading.model.js";
+import { calculateAirQuality } from "../services/aqi.service.js";
 const fanCommands = new Map();
 export const receiveSensorData = async (req, res) => {
   try {
@@ -39,6 +40,9 @@ export const receiveSensorData = async (req, res) => {
         missingFields,
       });
     }
+    const airQuality = calculateAirQuality(dustDensity, mq135Raw);
+
+console.log("Air Quality:", airQuality);
 
     const sensorReading = await SensorReading.create({
       deviceId,
@@ -49,6 +53,7 @@ export const receiveSensorData = async (req, res) => {
       dustRaw,
       dustVoltage,
       dustDensity,
+      airQuality,
     });
     const io = req.app.get("io");
 
@@ -61,7 +66,9 @@ io.emit("telemetry", {
   dustRaw,
   dustVoltage,
   dustDensity,
+  airQuality,
 });
+
 
     return res.status(201).json({
       success: true,

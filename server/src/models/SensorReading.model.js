@@ -35,6 +35,10 @@ const sensorReadingSchema = new mongoose.Schema(
             type: Number,
             required: true
         },
+        airQuality: {
+            score: Number,
+            level: String,
+        },
        
     },
     {

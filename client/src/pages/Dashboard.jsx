@@ -47,53 +47,53 @@ function SensorCard({ icon, label, value, unit, description }) {
   );
 }
 
-function getAirQuality(dustDensity, mq135Raw) {
-  const dustScore = Math.min(
-    (Number(dustDensity || 0) / 0.15) * 100,
-    100
-  );
+// function getAirQuality(dustDensity, mq135Raw) {
+//   const dustScore = Math.min(
+//     (Number(dustDensity || 0) / 0.15) * 100,
+//     100
+//   );
 
-  const gasScore = Math.min(
-    (Number(mq135Raw || 0) / 2500) * 100,
-    100
-  );
+//   const gasScore = Math.min(
+//     (Number(mq135Raw || 0) / 2500) * 100,
+//     100
+//   );
 
-  const score = Math.round(Math.max(dustScore, gasScore));
+//   const score = Math.round(Math.max(dustScore, gasScore));
 
-  if (score <= 25) {
-    return {
-      score,
-      label: "Good",
-      description: "Air quality looks good",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    };
-  }
+//   if (score <= 25) {
+//     return {
+//       score,
+//       label: "Good",
+//       description: "Air quality looks good",
+//       className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+//     };
+//   }
 
-  if (score <= 50) {
-    return {
-      score,
-      label: "Moderate",
-      description: "Air quality is acceptable",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
+//   if (score <= 50) {
+//     return {
+//       score,
+//       label: "Moderate",
+//       description: "Air quality is acceptable",
+//       className: "bg-amber-50 text-amber-700 border-amber-200",
+//     };
+//   }
 
-  if (score <= 75) {
-    return {
-      score,
-      label: "Poor",
-      description: "Consider increasing purification",
-      className: "bg-orange-50 text-orange-700 border-orange-200",
-    };
-  }
+//   if (score <= 75) {
+//     return {
+//       score,
+//       label: "Poor",
+//       description: "Consider increasing purification",
+//       className: "bg-orange-50 text-orange-700 border-orange-200",
+//     };
+//   }
 
-  return {
-    score,
-    label: "Very Poor",
-    description: "High pollution detected",
-    className: "bg-rose-50 text-rose-700 border-rose-200",
-  };
-}
+//   return {
+//     score,
+//     label: "Very Poor",
+//     description: "High pollution detected",
+//     className: "bg-rose-50 text-rose-700 border-rose-200",
+//   };
+// }
 
 export default function Dashboard() {
   const [telemetry, setTelemetry] = useState(null);
@@ -188,6 +188,7 @@ export default function Dashboard() {
           humidity: Number(item.humidity ?? 0),
           dustDensity: Number(item.dustDensity ?? 0),
           mq135Raw: Number(item.mq135Raw ?? 0),
+          airQuality: item.airQuality,
         }));
 
         setHistoricalData(formattedData);
@@ -326,10 +327,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (fanMode !== "AUTO" || !telemetry) return;
 
-    const quality = getAirQuality(
-      telemetry.dustDensity,
-      telemetry.mq135Raw
-    );
+    const quality = telemetry.airQuality;
+
+if (!quality) return;
 
     setSmoothedAirScore((previous) => {
       if (previous === 0) return quality.score;
@@ -413,9 +413,28 @@ export default function Dashboard() {
 
   const currentData = telemetry || latestHistorical;
 
-  const airQuality = currentData
-    ? getAirQuality(currentData.dustDensity, currentData.mq135Raw)
-    : null;
+ const airQuality = currentData?.airQuality
+  ? {
+      score: currentData.airQuality.score,
+      label: currentData.airQuality.level,
+      description:
+        currentData.airQuality.level === "Good"
+          ? "Air quality looks good"
+          : currentData.airQuality.level === "Moderate"
+          ? "Air quality is acceptable"
+          : currentData.airQuality.level === "Poor"
+          ? "Consider increasing purification"
+          : "High pollution detected",
+      className:
+        currentData.airQuality.level === "Good"
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : currentData.airQuality.level === "Moderate"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : currentData.airQuality.level === "Poor"
+          ? "bg-orange-50 text-orange-700 border-orange-200"
+          : "bg-rose-50 text-rose-700 border-rose-200",
+    }
+  : null;
 
   /*
    * ------------------------------------------------
