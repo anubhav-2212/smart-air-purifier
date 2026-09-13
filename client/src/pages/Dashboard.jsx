@@ -627,6 +627,7 @@ if (!quality) return;
                   dataKey="temperature"
                   title="Temperature"
                   unit="°C"
+                 color="#3b82f6"
                 />
 
                 <SensorChart
@@ -634,6 +635,7 @@ if (!quality) return;
                   dataKey="humidity"
                   title="Humidity"
                   unit="%"
+                  color="#3b82f6"
                 />
 
                 <SensorChart
@@ -641,12 +643,14 @@ if (!quality) return;
                   dataKey="dustDensity"
                   title="Dust Density"
                   unit="mg/m³"
+                  color="#22c55e"
                 />
 
                 <SensorChart
                   data={graphData}
                   dataKey="mq135Raw"
                   title="MQ-135 Gas Index"
+                  color="#a855f7"
                 />
 
               </div>
