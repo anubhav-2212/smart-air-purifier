@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   Droplets,
@@ -102,12 +102,6 @@ export default function Dashboard() {
   const [historicalData, setHistoricalData] = useState([]);
   const [liveData, setLiveData] = useState([]);
   const [range, setRange] = useState("7d");
-
-  // Fan control
-  const [fanMode, setFanMode] = useState("MANUAL");
-  const [fanSpeed, setFanSpeed] = useState(0);
-  const [fanStatus, setFanStatus] = useState("Ready");
-  const [fanLoading, setFanLoading] = useState(false);
 
   /*
    * ------------------------------------------------
@@ -214,11 +208,40 @@ export default function Dashboard() {
    * ------------------------------------------------
    */
 
+  const [fanMode, setFanMode] = useState("MANUAL");
+  const [fanSpeed, setFanSpeed] = useState(0);
+  const [fanStatus, setFanStatus] = useState("Ready");
+  const [fanLoading, setFanLoading] = useState(false);
+
+  // Smoothed pollution score for stable Auto mode.
+  const [smoothedAirScore, setSmoothedAirScore] = useState(0);
+
+  // Last speed actually sent to the backend.
+  const [appliedFanSpeed, setAppliedFanSpeed] = useState(0);
+
+  const lastAutoCommandRef = useRef(null);
+  const lastAutoCommandTimeRef = useRef(0);
+  const autoRampRef = useRef(null);
+
   const sendFanCommand = async (speed, source = "manual") => {
-    const safeSpeed = Math.max(0, Math.min(100, Number(speed)));
+    const safeSpeed = Math.max(0, Math.min(100, Math.round(Number(speed))));
+
+    // Prevent duplicate automatic commands.
+    if (
+      source === "auto" &&
+      lastAutoCommandRef.current === safeSpeed &&
+      Date.now() - lastAutoCommandTimeRef.current < 15000
+    ) {
+      return;
+    }
+
+    if (source === "auto") {
+      lastAutoCommandRef.current = safeSpeed;
+      lastAutoCommandTimeRef.current = Date.now();
+    }
 
     setFanLoading(true);
-    setFanStatus("Sending...");
+    setFanStatus(source === "auto" ? "Adjusting..." : "Sending...");
 
     try {
       const response = await fetch(`${API_BASE}/api/fan`, {
@@ -238,15 +261,21 @@ export default function Dashboard() {
         throw new Error(result.message || "Failed to set fan speed");
       }
 
+      setAppliedFanSpeed(safeSpeed);
       setFanSpeed(safeSpeed);
-      setFanStatus(
-        source === "auto" ? `Auto: ${safeSpeed}%` : `Set to ${safeSpeed}%`
-      );
 
-      console.log("FAN COMMAND:", result);
+      setFanStatus(
+        source === "auto"
+          ? `Auto: ${safeSpeed}%`
+          : `Set to ${safeSpeed}%`
+      );
     } catch (error) {
       console.error("Fan control error:", error);
       setFanStatus("Command failed");
+
+      if (source === "auto") {
+        lastAutoCommandRef.current = null;
+      }
     } finally {
       setFanLoading(false);
     }
@@ -257,13 +286,43 @@ export default function Dashboard() {
   };
 
   /*
-   * Automatic fan logic:
-   * Good      -> 20%
-   * Moderate  -> 45%
-   * Poor      -> 70%
-   * Very Poor -> 100%
+   * SMART AUTO CONTROLLER
+   *
+   * - Smooths sensor noise
+   * - Uses hysteresis to prevent oscillation
+   * - Converts pollution severity into target speed
+   * - Changes speed gradually by 5%
    */
 
+  const calculateAutoTarget = (score, currentSpeed) => {
+    let target;
+
+    if (currentSpeed < 30) {
+      if (score <= 22) target = 20;
+      else if (score <= 47) target = 35;
+      else if (score <= 72) target = 60;
+      else target = 90;
+    } else if (currentSpeed < 55) {
+      if (score <= 18) target = 20;
+      else if (score <= 44) target = 35;
+      else if (score <= 70) target = 60;
+      else target = 90;
+    } else if (currentSpeed < 80) {
+      if (score <= 20) target = 30;
+      else if (score <= 48) target = 45;
+      else if (score <= 73) target = 65;
+      else target = 95;
+    } else {
+      if (score <= 18) target = 35;
+      else if (score <= 45) target = 50;
+      else if (score <= 70) target = 70;
+      else target = 100;
+    }
+
+    return Math.max(20, Math.min(100, target));
+  };
+
+  // Smooth incoming air-quality scores.
   useEffect(() => {
     if (fanMode !== "AUTO" || !telemetry) return;
 
@@ -272,30 +331,62 @@ export default function Dashboard() {
       telemetry.mq135Raw
     );
 
-    let targetSpeed = 20;
+    setSmoothedAirScore((previous) => {
+      if (previous === 0) return quality.score;
 
-    if (quality.score > 75) {
-      targetSpeed = 100;
-    } else if (quality.score > 50) {
-      targetSpeed = 70;
-    } else if (quality.score > 25) {
-      targetSpeed = 45;
-    }
-
-    if (targetSpeed !== fanSpeed) {
-      sendFanCommand(targetSpeed, "auto");
-    }
+      // 75% previous + 25% new reading.
+      return previous * 0.75 + quality.score * 0.25;
+    });
   }, [
     fanMode,
     telemetry?.dustDensity,
     telemetry?.mq135Raw,
   ]);
 
+  // Gradually move the fan toward the calculated target.
+  useEffect(() => {
+    if (fanMode !== "AUTO" || !telemetry) return;
+
+    const score = Math.round(smoothedAirScore);
+
+    if (!Number.isFinite(score)) return;
+
+    const targetSpeed = calculateAutoTarget(
+      score,
+      appliedFanSpeed
+    );
+
+    if (targetSpeed === appliedFanSpeed) return;
+
+    const difference = targetSpeed - appliedFanSpeed;
+
+    // Maximum 5% change per automatic adjustment.
+    const nextSpeed =
+      appliedFanSpeed +
+      Math.sign(difference) *
+      Math.min(Math.abs(difference), 5);
+
+    clearTimeout(autoRampRef.current);
+
+    autoRampRef.current = setTimeout(() => {
+      sendFanCommand(nextSpeed, "auto");
+    }, 1500);
+
+    return () => clearTimeout(autoRampRef.current);
+  }, [
+    fanMode,
+    smoothedAirScore,
+    appliedFanSpeed,
+  ]);
+
   const handleModeChange = (mode) => {
     setFanMode(mode);
+    clearTimeout(autoRampRef.current);
 
     if (mode === "AUTO") {
       setFanStatus("Auto mode enabled");
+      lastAutoCommandRef.current = null;
+      setSmoothedAirScore(0);
     } else {
       setFanStatus("Manual mode enabled");
     }
@@ -642,30 +733,35 @@ export default function Dashboard() {
                     </p>
 
                     <p className="mt-2 text-sm text-slate-600">
-                      Fan speed adjusts automatically from the estimated
-                      air-quality score.
+                      Uses smoothed pollution readings, hysteresis, and
+                      gradual speed changes to keep the fan stable.
                     </p>
 
-                    <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
                       <div className="rounded-lg bg-white p-2">
-                        <p className="font-semibold text-slate-700">Good</p>
-                        <p className="mt-1 text-slate-400">20%</p>
+                        <p className="font-semibold text-slate-700">Smoothed</p>
+                        <p className="mt-1 text-slate-400">Noise reduced</p>
                       </div>
 
                       <div className="rounded-lg bg-white p-2">
-                        <p className="font-semibold text-slate-700">Moderate</p>
-                        <p className="mt-1 text-slate-400">45%</p>
+                        <p className="font-semibold text-slate-700">Stable</p>
+                        <p className="mt-1 text-slate-400">Hysteresis</p>
                       </div>
 
                       <div className="rounded-lg bg-white p-2">
-                        <p className="font-semibold text-slate-700">Poor</p>
-                        <p className="mt-1 text-slate-400">70%</p>
+                        <p className="font-semibold text-slate-700">Gradual</p>
+                        <p className="mt-1 text-slate-400">5% steps</p>
                       </div>
+                    </div>
 
-                      <div className="rounded-lg bg-white p-2">
-                        <p className="font-semibold text-slate-700">Very Poor</p>
-                        <p className="mt-1 text-slate-400">100%</p>
-                      </div>
+                    <div className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs">
+                      <span className="text-slate-400">
+                        Smoothed air score
+                      </span>
+
+                      <span className="font-semibold text-slate-700">
+                        {Math.round(smoothedAirScore)} / 100
+                      </span>
                     </div>
                   </div>
                 )}
